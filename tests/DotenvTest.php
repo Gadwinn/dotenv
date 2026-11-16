@@ -296,4 +296,32 @@ final class DotenvTest extends TestCase
         $this->assertArrayNotHasKey('DOTENV_T_A', $_ENV);
         $this->assertFalse(getenv('DOTENV_T_A'));
     }
+
+    public function testValuesOfAFileAreInterpolated(): void
+    {
+        $dotenv = (new Dotenv())->load(__DIR__ . '/.env.interpolation');
+
+        $this->assertSame('mysql://localhost/app', $dotenv->get('DB_URL'));
+        $this->assertSame('host is localhost', $dotenv->get('QUOTED'));
+        $this->assertSame('host=localhost', $dotenv->get('MULTI'));
+        $this->assertSame('${DOTENV_T_NOT_DEFINED}', $dotenv->get('UNKNOWN'));
+    }
+
+    public function testSingleQuotedValuesAreLiteral(): void
+    {
+        $dotenv = (new Dotenv())->load(__DIR__ . '/.env.interpolation', "INLINE='\${DB_HOST}'");
+
+        $this->assertSame('${DB_HOST}', $dotenv->get('LITERAL'));
+        $this->assertSame('host=${DB_HOST}', $dotenv->get('RAW_MULTI'));
+        $this->assertSame('${DB_HOST}', $dotenv->get('INLINE'));
+    }
+
+    public function testInterpolationPrefersTheRealEnvironment(): void
+    {
+        putenv('DOTENV_T_A=from-env');
+
+        $dotenv = (new Dotenv())->load("DOTENV_T_A=from-file\nB=\${DOTENV_T_A}");
+
+        $this->assertSame('from-env', $dotenv->get('B'));
+    }
 }

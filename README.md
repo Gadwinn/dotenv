@@ -87,7 +87,15 @@ $dotenv = (new Dotenv())->load("DB_HOST=127.0.0.1\nDB_PORT=5432");
 
 ### Variable interpolation
 
-`${VAR}` placeholders in file paths and inline strings are resolved against `getenv()`, `$_ENV`, and already-loaded keys (in that order). An unknown variable is left as is. The **content of a file** is not interpolated.
+`${VAR}` placeholders are resolved against `getenv()`, `$_ENV`, and already-loaded keys (in that order), in file paths and in values, whether they come from a file or an inline string. An unknown variable is left as is. A single-quoted value is literal, as in a shell:
+
+```dotenv
+DB_HOST=localhost
+DB_URL=mysql://${DB_HOST}/app   # mysql://localhost/app
+TEMPLATE='${DB_HOST}'            # ${DB_HOST}
+```
+
+In file paths:
 
 ```php
 // .env.${APP_ENV} becomes .env.production when APP_ENV=production

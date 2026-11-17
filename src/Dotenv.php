@@ -75,21 +75,9 @@ class Dotenv implements DotenvInterface
     {
         $dotenv = clone $this;
 
-        foreach ($string as $s) {
-            $s = preg_replace_callback(
-                '/\$\{(' . self::REGEX_KEY . ')}/',
-                static function (array $matches) use ($dotenv): string {
-                    $env = getenv($matches[1]);
-                    if ($env !== false) {
-                        return $env;
-                    }
-
-                    $superGlobal = $_ENV[$matches[1]] ?? null;
-
-                    return is_string($superGlobal) ? $superGlobal : $dotenv->get($matches[1], $matches[0]);
-                },
-                $s
-            ) ?? $s;
+        foreach ($string as $content) {
+            // Placeholders of a path are resolved here, those of the values in parse().
+            $s = $dotenv->interpolate($content);
 
             if ($dotenv->isPotentialFilename($s)) {
                 $realpath = realpath($s);
@@ -132,12 +120,34 @@ class Dotenv implements DotenvInterface
                 }
             }
 
-            if (strpos($s, '=') !== false) {
-                $dotenv->parse($s);
+            if (strpos($content, '=') !== false) {
+                $dotenv->parse($content);
             }
         }
 
         return $dotenv;
+    }
+
+    /**
+     * Replaces the ${VAR} placeholders with the value found in getenv(), $_ENV
+     * or the keys already loaded (in that order). An unknown variable is left as is.
+     */
+    protected function interpolate(string $string): string
+    {
+        return preg_replace_callback(
+            '/\$\{(' . self::REGEX_KEY . ')}/',
+            function (array $matches): string {
+                $env = getenv($matches[1]);
+                if ($env !== false) {
+                    return $env;
+                }
+
+                $superGlobal = $_ENV[$matches[1]] ?? null;
+
+                return is_string($superGlobal) ? $superGlobal : $this->get($matches[1], $matches[0]);
+            },
+            $string
+        ) ?? $string;
     }
 
     protected function stripQuotes(string $value): string
@@ -192,10 +202,14 @@ class Dotenv implements DotenvInterface
         );
 
         for ($i = 0, $matchesCount = count($matches[0]); $i < $matchesCount; $i++) {
-            $this->setValue(
-                $matches['key'][$i],
-                $this->stripQuotes($matches['value'][$i])
-            );
+            $value = $this->stripQuotes($matches['value'][$i]);
+
+            // Like in a shell, a single-quoted value is literal.
+            if (!str_starts_with($matches['value'][$i], self::SINGLE_QUOTE)) {
+                $value = $this->interpolate($value);
+            }
+
+            $this->setValue($matches['key'][$i], $value);
         }
 
         // TODO: Optimize for large files
